@@ -34,8 +34,6 @@ async def get_urls_file(message: Message):
 
 @dp.message_handler(commands=['getfile'])
 async def get_xlsx_file(message: Message):
-    if not started:
-        await main()
     await write_xlsx()
     await bot.send_document(message.chat.id, InputFile('files/DATA.xlsx'))
 
@@ -70,8 +68,6 @@ async def get_urls():
 
 
 async def main():
-    global started
-    started = True
     print("Function 'main' is running")
     urls = await get_urls()
     brow = await launch(headless=True, options={'args': ['--no-sandbox']})
@@ -128,6 +124,6 @@ async def write_xlsx():
 if __name__ == '__main__':
     sched = AsyncIOScheduler()
     sched.add_job(main, 'interval', minutes=1)
-    started = False
+    asyncio.get_event_loop().run_until_complete(main())
     sched.start()
     executor.start_polling(dp, skip_updates=True)
