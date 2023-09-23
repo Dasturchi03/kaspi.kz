@@ -77,7 +77,7 @@ async def main():
     for url in urls:
         # try:
             await page.goto(url)
-            await page.waitFor(1000)
+            await page.waitFor(100)
             cont = await page.content()
             await get_data(cont, url)
         # except Exception as err:
