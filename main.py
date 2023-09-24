@@ -19,33 +19,57 @@ bot = Bot(bot_token)
 dp = Dispatcher(bot)
 
 
-@dp.message_handler(commands=['start'], state='*')
-async def start_bot(message: Message):
-    mess = "Используйте команду /getfile, чтобы получить проанализированный файл Excel.\n\n"
-    mess += "Используйте команду /urls, чтобы получить файл, содержащий URL-адреса.\n\n"
-    mess += "Чтобы сбросить URL-адреса, отправьте мне файл .txt с URL-адресами."
-    await bot.send_message(message.chat.id, mess)
-
-
 @dp.message_handler(commands=['urls'])
 async def get_urls_file(message: Message):
-    await bot.send_document(message.chat.id, InputFile('files/urls.txt'))
+    with open('settings.json', 'r') as file:
+        dc = json.load(file)
+        MESSAGE = await bot.send_document(message.chat.id, InputFile('files/urls.txt'))
+        dc['users'][str(message.chat.id)] = MESSAGE.message_id
+    with open('settings.json', 'w') as file:
+        file.write(json.dumps(dc, ensure_ascii=False, indent=2))
 
 
 @dp.message_handler(commands=['getfile'])
 async def get_xlsx_file(message: Message):
     await write_xlsx()
-    await bot.send_document(message.chat.id, InputFile('files/DATA.xlsx'))
-
+    with open('settings.json', 'r') as file:
+        dc = json.load(file)
+        MESSAGE = await bot.send_document(message.chat.id, InputFile('files/DATA.xlsx'))
+        dc['users'][str(message.chat.id)] = MESSAGE.message_id
+    with open('settings.json', 'w') as file:
+        file.write(json.dumps(dc, ensure_ascii=False, indent=2))
+    if not STARTED:
+        await main()
 
 @dp.message_handler(content_types=['document'])
 async def add_urls_file(message: Message):
-    file_id = message.document.file_id
-    file_info = await bot.get_file(file_id)
-    lines = await download_file(file_info)
-    for i in lines:
-        print(i)
-    await message.reply("Принял")
+    with open('settings.json', 'r') as file:
+        dc = json.load(file)
+        file_id = message.document.file_id
+        file_info = await bot.get_file(file_id)
+        lines = await download_file(file_info)
+        for i in lines:
+            print(i)
+        MESSAGE = await message.reply("Принял")
+        dc['users'][str(message.chat.id)] = MESSAGE.message_id
+    with open('settings.json', 'w') as file:
+        file.write(json.dumps(dc, ensure_ascii=False, indent=2))
+    if not STARTED:
+        await main()
+
+@dp.message_handler()
+async def start_bot(message: Message, state):
+    with open('settings.json', 'r') as file:
+        dc = json.load(file)
+        mess = "Используйте команду /getfile, чтобы получить проанализированный файл Excel.\n\n"
+        mess += "Используйте команду /urls, чтобы получить файл, содержащий URL-адреса.\n\n"
+        mess += "Чтобы сбросить URL-адреса, отправьте мне файл .txt с URL-адресами."
+        MESSAGE = await bot.send_message(message.chat.id, mess)
+        dc['users'][str(message.chat.id)] = MESSAGE.message_id
+    with open('settings.json', 'w') as file:
+        file.write(json.dumps(dc, ensure_ascii=False, indent=2))
+    if not STARTED:
+        await main()
 
 
 async def download_file(file_info: File):
@@ -68,16 +92,25 @@ async def get_urls():
 
 
 async def main():
+    global STARTED
+    STARTED = True
+    try:
+        with open('settings.json', 'r') as file:
+            dc = json.load(file)
+            for i, j in dc['users'].items():
+                await bot.edit_message_text("Загрузка данных...", i, j)
+    except:
+        pass
     print("Function 'main' is running")
     urls = await get_urls()
-    brow = await launch(options={'args': ['--no-sandbox']})
+    brow = await launch(headless=True, options={'args': ['--no-sandbox']})
     page = await brow.newPage()
     cookies = [{'name': 'layout', 'value': 'd', 'domain': 'kaspi.kz', 'path': '/shop', 'expires': 1726644470.633389, 'size': 7, 'httpOnly': False, 'secure': False, 'session': False}, {'name': 'k_stat', 'value': '74791a40-1e09-45f8-a9ed-d4ec9e7b7359', 'domain': 'kaspi.kz', 'path': '/', 'expires': 1726644470.844751, 'size': 42, 'httpOnly': False, 'secure': False, 'session': False}, {'name': 'ks.tg', 'value': '84', 'domain': 'kaspi.kz', 'path': '/', 'expires': 1726644470.928354, 'size': 7, 'httpOnly': False, 'secure': False, 'session': False}, {'name': 'kaspi.storefront.cookie.city', 'value': '632210000', 'domain': 'kaspi.kz', 'path': '/', 'expires': 1726644474, 'size': 37, 'httpOnly': False, 'secure': False, 'session': False}]
     await page.setCookie(*cookies)
     for url in urls:
         # try:
             await page.goto(url)
-            await page.waitFor(100)
+            await page.waitFor(200)
             cont = await page.content()
             await get_data(cont, url)
         # except Exception as err:
@@ -86,6 +119,13 @@ async def main():
     
     await brow.close()
     print("The 'main' function has completed the job")
+    try:
+        with open('settings.json', 'r') as file:
+            dc = json.load(file)
+            for i, j in dc['users'].items():
+                await bot.edit_message_text("Данные загружены✅", i, j)
+    except:
+        pass
 
 
 async def get_data(text, url):
@@ -124,6 +164,6 @@ async def write_xlsx():
 if __name__ == '__main__':
     sched = AsyncIOScheduler()
     sched.add_job(main, 'interval', minutes=1)
-    asyncio.get_event_loop().run_until_complete(main())
+    STARTED = False
     sched.start()
     executor.start_polling(dp, skip_updates=True)
