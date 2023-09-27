@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import asyncio
 import openpyxl
@@ -12,6 +13,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 with open('settings.json', 'r') as settings_file:
     dc = json.load(settings_file)
+    INTERVAL = int(dc['interval'])
     bot_token = dc['bot_token']
 
 
@@ -101,7 +103,9 @@ async def main():
                 await bot.edit_message_text("Загрузка данных...", i, j)
     except:
         pass
-    print("Function 'main' is running")
+    sys.stdout.write('\x1b[1A')
+    sys.stdout.write("\x1b[2K")
+    print("Обновление информации...")
     urls = await get_urls()
     brow = await launch(headless=True, options={'args': ['--no-sandbox']})
     page = await brow.newPage()
@@ -119,7 +123,9 @@ async def main():
     await write_xlsx()
     
     await brow.close()
-    print("The 'main' function has completed the job")
+    sys.stdout.write('\x1b[1A')
+    sys.stdout.write("\x1b[2K")
+    print("Информация обновлена")
     try:
         with open('settings.json', 'r') as file:
             dc = json.load(file)
@@ -155,7 +161,7 @@ async def write_xlsx():
     except:
         wk = openpyxl.Workbook()
     sheet = wk.active
-    wk.remove_sheet(sheet)
+    wk.remove(sheet)
     wk.create_sheet("Sheet")
     sheet = wk['Sheet']
     with open('files/data.json', 'r', encoding='UTF-8') as file:
@@ -164,12 +170,18 @@ async def write_xlsx():
         sheet.append([i] + j)
     sheet.column_dimensions[get_column_letter(1)].width = 90
     sheet.column_dimensions[get_column_letter(2)].width = 50
-    wk.save('files/DATA.xlsx')
+    try:
+        wk.save('files/DATA.xlsx')
+    except:
+        pass
 
 
 if __name__ == '__main__':
     sched = AsyncIOScheduler()
-    sched.add_job(main, 'interval', minutes=1)
+    print(f"Интервал установлен на {INTERVAL} секунд.")
+    print("Вы можете изменить это в файле settings.json.")
+    sched.add_job(main, 'interval', seconds=INTERVAL)
     STARTED = False
     sched.start()
-    executor.start_polling(dp, skip_updates=True)
+    print('Бот запущен')
+    executor.start_polling(dp)
